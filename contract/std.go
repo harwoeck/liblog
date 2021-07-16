@@ -1,30 +1,13 @@
-// Package contract provides interfaces for a common logging backend
 package contract
 
 import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
-
-type fieldImpl struct {
-	key   string
-	value interface{}
-}
-
-func (f *fieldImpl) Key() string        { return f.key }
-func (f *fieldImpl) Value() interface{} { return f.value }
-
-// NewField provides a simple shortcut function to create a struct that
-// satisfies the Field interface
-func NewField(key string, value interface{}) Field {
-	return &fieldImpl{
-		key:   key,
-		value: value,
-	}
-}
 
 type fieldCollection []Field
 
@@ -33,55 +16,66 @@ func (f fieldCollection) String() string {
 	for _, item := range f {
 		s = append(s, fmt.Sprintf("%s=%q", item.Key(), fmt.Sprintf("%v", item.Value())))
 	}
-	return strings.Join(s, ", ")
+	r := strings.Join(s, ", ")
+	if len(r) > 0 {
+		return "(" + r + ")"
+	}
+	return ""
 }
 
 type logger struct {
-	outWriter          io.Writer
-	errWriter          io.Writer
-	minLevel           Level
-	isInDevEnvironment bool
-	disableAllWrites   bool
-	name               string
-	fields             fieldCollection
+	outWriter        io.Writer
+	errWriter        io.Writer
+	wd               string
+	optMinLevel      Level
+	optInDev         bool
+	optDisableWrites bool
+	name             string
+	fields           fieldCollection
 }
 
 func newLogger(outWriter, errWriter io.Writer, minLevel Level) *logger {
+	wd, err := os.Getwd()
+	if err != nil {
+		_, _ = fmt.Fprintf(errWriter, "liblog/contract.std: failed to get working directory\n")
+	}
+
 	return &logger{
-		outWriter:          outWriter,
-		errWriter:          errWriter,
-		minLevel:           minLevel,
-		isInDevEnvironment: true,
+		outWriter:   outWriter,
+		errWriter:   errWriter,
+		wd:          wd,
+		optMinLevel: minLevel,
+		optInDev:    true,
+	}
+}
+
+func (l *logger) clone() *logger {
+	return &logger{
+		outWriter:        l.outWriter,
+		errWriter:        l.errWriter,
+		wd:               l.wd,
+		optMinLevel:      l.optMinLevel,
+		optInDev:         l.optInDev,
+		optDisableWrites: l.optDisableWrites,
+		name:             l.name,
+		fields:           l.fields,
 	}
 }
 
 func (l *logger) Named(name string) Logger {
-	if len(l.name) > 0 {
-		name = l.name + "." + name
+	clone := l.clone()
+	if len(clone.name) == 0 {
+		clone.name = name
+	} else {
+		clone.name += "." + name
 	}
-	name = strings.ToUpper(name)
-
-	return &logger{
-		outWriter:          l.outWriter,
-		errWriter:          l.errWriter,
-		minLevel:           l.minLevel,
-		disableAllWrites:   l.disableAllWrites,
-		isInDevEnvironment: l.isInDevEnvironment,
-		name:               name,
-		fields:             l.fields,
-	}
+	return clone
 }
 
 func (l *logger) With(fields ...Field) Logger {
-	return &logger{
-		outWriter:          l.outWriter,
-		errWriter:          l.errWriter,
-		minLevel:           l.minLevel,
-		disableAllWrites:   l.disableAllWrites,
-		isInDevEnvironment: l.isInDevEnvironment,
-		name:               l.name,
-		fields:             append(l.fields, fields...),
-	}
+	clone := l.clone()
+	clone.fields = append(clone.fields, fields...)
+	return clone
 }
 
 func (l *logger) Sync() error {
@@ -89,45 +83,46 @@ func (l *logger) Sync() error {
 }
 
 func (l *logger) log(level Level, msg string, fields fieldCollection) {
-	if l.disableAllWrites {
+	if l.optDisableWrites {
 		return
 	}
 
-	if level < l.minLevel {
+	if level < l.optMinLevel {
 		return
 	}
 
-	timeStr := time.Now().UTC().Format(time.RFC3339Nano)
-	for len(timeStr) < 35 {
+	timeStr := time.Now().Format("2006-01-02 15:04:05.999 Z07:00")
+	for len(timeStr) < 30 {
 		timeStr += " "
 	}
 
-	var levelStr string
-	switch level {
-	case DebugLevel:
-		levelStr = "DEBUG "
-	case InfoLevel:
-		levelStr = "INFO  "
-	case WarnLevel:
-		levelStr = "WARN  "
-	case ErrorLevel:
-		levelStr = "ERROR "
-	case DPanicLevel:
-		levelStr = "DPANIC"
-	case PanicLevel:
-		levelStr = "PANIC "
-	case FatalLevel:
-		levelStr = "FATAL "
+	levelStr := level.String()
+	for len(levelStr) < 6 {
+		levelStr += " "
 	}
 
 	var nameStr string
 	if len(l.name) > 0 {
-		nameStr = l.name + ": "
+		nameStr = l.name + " "
 	}
 
-	s := fmt.Sprintf("%s %s %s%s (%s)\n", timeStr, levelStr, nameStr, msg, append(l.fields, fields...).String())
+	var callerStr string
+	_, frameF, frameL, defined := runtime.Caller(2)
+	if !defined {
+		_, _ = fmt.Fprintf(l.errWriter, "liblog/contract.std: failed to get caller\n")
+	} else {
+		if len(l.wd) > 0 {
+			frameF = strings.TrimPrefix(frameF, l.wd)
+			frameF = strings.TrimPrefix(frameF, "/")
+		}
+
+		callerStr = fmt.Sprintf("%s:%d ", frameF, frameL)
+	}
+
+	s := fmt.Sprintf("%s %s %s%s%s %s\n", timeStr, levelStr, nameStr, callerStr, msg, fields.String())
+
 	if _, err := fmt.Fprintf(l.outWriter, s); err != nil {
-		_, _ = fmt.Fprintf(l.errWriter, "logger: writing of message %q failed due to: %v", s, err)
+		_, _ = fmt.Fprintf(l.errWriter, "liblog/contract.std: writing of message %q failed due to: %v", s, err)
 	}
 }
 
@@ -147,9 +142,43 @@ func (l *logger) Error(msg string, fields ...Field) {
 	l.log(ErrorLevel, msg, fields)
 }
 
+// FormatToError is a public helper function that converts a msg and fields pair
+// into an combined error. Intended for Logger.ErrorReturn
+func FormatToError(name string, callerSkip int, msg string, fields ...Field) error {
+	var nameStr string
+	if len(name) > 0 {
+		nameStr = name + ": "
+	}
+
+	wd, _ := os.Getwd()
+
+	var caller string
+	_, frameF, frameL, defined := runtime.Caller(callerSkip + 1)
+	if defined {
+		if len(wd) > 0 {
+			frameF = strings.TrimPrefix(frameF, wd)
+			frameF = strings.TrimPrefix(frameF, "/")
+		}
+
+		caller = fmt.Sprintf("%s:%d: ", frameF, frameL)
+	}
+
+	fieldsStr := fieldCollection(fields).String()
+	if len(fieldsStr) > 0 {
+		fieldsStr = " " + fieldsStr
+	}
+
+	return fmt.Errorf("%s%s%s%s", nameStr, caller, msg, fieldsStr)
+}
+
+func (l *logger) ErrorReturn(msg string, fields ...Field) error {
+	l.log(ErrorLevel, msg, fields)
+	return FormatToError(l.name, 1, msg, fields...)
+}
+
 func (l *logger) DPanic(msg string, fields ...Field) {
 	l.log(DPanicLevel, msg, fields)
-	if l.isInDevEnvironment {
+	if l.optInDev {
 		panic(msg)
 	}
 }
@@ -164,20 +193,20 @@ func (l *logger) Fatal(msg string, fields ...Field) {
 	os.Exit(1)
 }
 
-// StdImplOption is an option function for NewStdImpl and MustNewStdImpl
-type StdImplOption func(*logger) error
+// StdOption is an option function for NewStd and MustNewStd
+type StdOption func(*logger) error
 
 // DisableLogWrites fully disables the logger instance. No message is written
 // to the OutWriter and ErrWriter.
-func DisableLogWrites() StdImplOption {
+func DisableLogWrites() StdOption {
 	return func(log *logger) error {
-		log.disableAllWrites = true
+		log.optDisableWrites = true
 		return nil
 	}
 }
 
 // OutWriter lets you set the destination for the default logging output
-func OutWriter(w io.Writer) StdImplOption {
+func OutWriter(w io.Writer) StdOption {
 	return func(log *logger) error {
 		log.outWriter = w
 		return nil
@@ -187,7 +216,7 @@ func OutWriter(w io.Writer) StdImplOption {
 // ErrWriter lets you set the destination for errors that happened inside the
 // standard logger itself (which at the moment can only happen if the OutWriter
 // returns an error on writing)
-func ErrWriter(w io.Writer) StdImplOption {
+func ErrWriter(w io.Writer) StdOption {
 	return func(log *logger) error {
 		log.errWriter = w
 		return nil
@@ -196,26 +225,26 @@ func ErrWriter(w io.Writer) StdImplOption {
 
 // MinLevel sets the minimum needed level for messages that get written to
 // OutWriter. Messages below this level will get discarded
-func MinLevel(minLevel Level) StdImplOption {
+func MinLevel(minLevel Level) StdOption {
 	return func(log *logger) error {
-		log.minLevel = minLevel
+		log.optMinLevel = minLevel
 		return nil
 	}
 }
 
 // IsInDevEnvironment influences whether or not DPanicLevel panics or not
-func IsInDevEnvironment(isInDevEnvironment bool) StdImplOption {
+func IsInDevEnvironment(isInDevEnvironment bool) StdOption {
 	return func(log *logger) error {
-		log.isInDevEnvironment = isInDevEnvironment
+		log.optInDev = isInDevEnvironment
 		return nil
 	}
 }
 
-// NewStdImpl creates a new Logger using only Go's standard library. This can
+// NewStd creates a new Logger using only Go's standard library. This can
 // be useful for packages that want to include liblog, and provide logging
 // output by default, but not overstuff their library with third-party
 // dependencies.
-func NewStdImpl(opts ...StdImplOption) (Logger, error) {
+func NewStd(opts ...StdOption) (Logger, error) {
 	log := newLogger(os.Stdout, os.Stderr, DebugLevel)
 	for _, opt := range opts {
 		if err := opt(log); err != nil {
@@ -225,10 +254,10 @@ func NewStdImpl(opts ...StdImplOption) (Logger, error) {
 	return log, nil
 }
 
-// MustNewStdImpl is like NewStdImpl, but panics if StdImplOption cannot be
+// MustNewStd is like NewStd, but panics if one of the StdOption cannot be
 // applied.
-func MustNewStdImpl(opts ...StdImplOption) Logger {
-	l, err := NewStdImpl(opts...)
+func MustNewStd(opts ...StdOption) Logger {
+	l, err := NewStd(opts...)
 	if err != nil {
 		panic(err)
 	}

@@ -1,6 +1,32 @@
 // Package contract provides interfaces for a common logging backend
 package contract
 
+// A Field is a marshaling operation used to add a key-value pair to a logger's
+// context
+type Field interface {
+	// Key returns the fields key part
+	Key() string
+	// Value returns the fields value part
+	Value() interface{}
+}
+
+type fieldImpl struct {
+	key   string
+	value interface{}
+}
+
+func (f *fieldImpl) Key() string        { return f.key }
+func (f *fieldImpl) Value() interface{} { return f.value }
+
+// NewField provides a simple shortcut function to create a struct that
+// satisfies the Field interface
+func NewField(key string, value interface{}) Field {
+	return &fieldImpl{
+		key:   key,
+		value: value,
+	}
+}
+
 // Level is a logging priority. Higher levels are more important.
 type Level int8
 
@@ -25,13 +51,26 @@ const (
 	FatalLevel
 )
 
-// A Field is a marshaling operation used to add a key-value pair to a logger's
-// context
-type Field interface {
-	// Key returns the fields key part
-	Key() string
-	// Value returns the fields value part
-	Value() interface{}
+// String returns a readable representation of Level
+func (l Level) String() string {
+	switch l {
+	case DebugLevel:
+		return "DEBUG"
+	case InfoLevel:
+		return "INFO"
+	case WarnLevel:
+		return "WARN"
+	case ErrorLevel:
+		return "ERROR"
+	case DPanicLevel:
+		return "DPANIC"
+	case PanicLevel:
+		return "PANIC"
+	case FatalLevel:
+		return "FATAL"
+	default:
+		return "UNKNOWN"
+	}
 }
 
 // Logger provides leveled, structured logging. It is an abstract interface for
@@ -58,6 +97,9 @@ type Logger interface {
 	// Error logs a message at ErrorLevel. The message includes any fields passed
 	// at the log site, as well as any fields accumulated on the logger.
 	Error(msg string, fields ...Field)
+	// ErrorReturn logs a message at ErrorLevel exactly like the Error function, but
+	// additionally returns an error object, containing the provided information.
+	ErrorReturn(msg string, fields ...Field) error
 	// DPanic logs a message at DPanicLevel. The message includes any fields
 	// passed at the log site, as well as any fields accumulated on the logger.
 	//
