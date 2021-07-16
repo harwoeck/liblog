@@ -111,7 +111,7 @@ func (l *logger) log(level Level, msg string, fields fieldCollection) {
 	if !defined {
 		_, _ = fmt.Fprintf(l.errWriter, "liblog/contract.std: failed to get caller\n")
 	} else {
-		if len(l.wd) > 0 {
+		if len(l.wd) > 0 && l.wd != "/" {
 			frameF = strings.TrimPrefix(frameF, l.wd)
 			frameF = strings.TrimPrefix(frameF, "/")
 		}
@@ -155,7 +155,7 @@ func FormatToError(name string, callerSkip int, msg string, fields ...Field) err
 	var caller string
 	_, frameF, frameL, defined := runtime.Caller(callerSkip + 1)
 	if defined {
-		if len(wd) > 0 {
+		if len(wd) > 0 && wd != "/" {
 			frameF = strings.TrimPrefix(frameF, wd)
 			frameF = strings.TrimPrefix(frameF, "/")
 		}
