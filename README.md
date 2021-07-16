@@ -2,6 +2,8 @@
 
 *liblog* is an interface/contract for logging backends. It should be used by public libraries and packages that want to give their user's control over structured and leveled logging output.
 
+[![GoDoc](https://pkg.go.dev/badge/github.com/harwoeck/liblog/contract)](https://pkg.go.dev/github.com/harwoeck/liblog/contract)
+
 ### Advantages
 
 - 🟢 Users can provide their own logging stack __**and**__ get detailed package-level logging
@@ -10,7 +12,7 @@
 ### Getting started
 
 - `go get github.com/harwoeck/liblog/contract` - provides the *liblog* interface, and an implementation that only relies on Go's standard library
-- Use `contract.NewStdImpl(...StdImplOption)` by default inside your package, but give users the option to specify their own logging implementation (`contract.Logger`)
+- Use `contract.NewStd(...StdOption)` by default inside your package, but give users the option to specify their own logging implementation (`contract.Logger`)
 
 ### Usage
 
@@ -29,7 +31,7 @@
     func (f *fieldImpl) Key() string        { return f.key }
     func (f *fieldImpl) Value() interface{} { return f.value }
     
-    func field(key string, value interface{}) core.Field {
+    func field(key string, value interface{}) contract.Field {
         return &fieldImpl{
             key:   key,
             value: value,
