@@ -1,6 +1,9 @@
 package zapimpl
 
 import (
+	"reflect"
+	"unsafe"
+
 	"github.com/harwoeck/liblog/contract"
 	"go.uber.org/zap"
 )
@@ -17,13 +20,23 @@ func castFields(fields []contract.Field) []zap.Field {
 	return zf
 }
 
-type impl struct {
-	log *zap.Logger
+func getZapLoggerName(log *zap.Logger) string {
+	rs := reflect.ValueOf(log).Elem()
+	rf := rs.FieldByName("name")
+	rf = reflect.NewAt(rf.Type(), unsafe.Pointer(rf.UnsafeAddr())).Elem()
+	return rf.String()
 }
 
-func newZapImpl(log *zap.Logger) contract.Logger {
+type impl struct {
+	log    *zap.Logger
+	name   string
+	fields []contract.Field
+}
+
+func newZapImpl(log *zap.Logger) *impl {
 	return &impl{
-		log: log,
+		log:  log,
+		name: getZapLoggerName(log),
 	}
 }
 
@@ -32,7 +45,9 @@ func (i *impl) Named(name string) contract.Logger {
 }
 
 func (i *impl) With(fields ...contract.Field) contract.Logger {
-	return newZapImpl(i.log.With(castFields(fields)...))
+	l := newZapImpl(i.log.With(castFields(fields)...))
+	l.fields = append(i.fields, fields...)
+	return l
 }
 
 func (i *impl) Sync() error {
@@ -53,6 +68,11 @@ func (i *impl) Warn(msg string, fields ...contract.Field) {
 
 func (i *impl) Error(msg string, fields ...contract.Field) {
 	i.log.Error(msg, castFields(fields)...)
+}
+
+func (i *impl) ErrorReturn(msg string, fields ...contract.Field) error {
+	i.log.Error(msg, castFields(fields)...)
+	return contract.FormatToError(i.name, 1, msg, append(i.fields, fields...)...)
 }
 
 func (i *impl) DPanic(msg string, fields ...contract.Field) {
