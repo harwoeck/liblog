@@ -119,7 +119,7 @@ func (l *logger) log(level Level, msg string, fields fieldCollection) {
 		callerStr = fmt.Sprintf("%s:%d ", frameF, frameL)
 	}
 
-	s := fmt.Sprintf("%s %s %s%s%s %s\n", timeStr, levelStr, nameStr, callerStr, msg, fields.String())
+	s := fmt.Sprintf("%s %s %s%s%s %s\n", timeStr, levelStr, nameStr, callerStr, msg, append(l.fields, fields...).String())
 
 	if _, err := fmt.Fprintf(l.outWriter, s); err != nil {
 		_, _ = fmt.Fprintf(l.errWriter, "liblog/contract.std: writing of message %q failed due to: %v", s, err)
@@ -173,7 +173,7 @@ func FormatToError(name string, callerSkip int, msg string, fields ...Field) err
 
 func (l *logger) ErrorReturn(msg string, fields ...Field) error {
 	l.log(ErrorLevel, msg, fields)
-	return FormatToError(l.name, 1, msg, fields...)
+	return FormatToError(l.name, 1, msg, append(l.fields, fields...)...)
 }
 
 func (l *logger) DPanic(msg string, fields ...Field) {
