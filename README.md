@@ -2,7 +2,7 @@
 
 *liblog* is an interface/contract for logging backends. It should be used by public libraries and packages that want to give their user's control over structured and leveled logging output.
 
-[![GoDoc](https://pkg.go.dev/badge/github.com/harwoeck/liblog/contract)](https://pkg.go.dev/github.com/harwoeck/liblog/contract)
+[![Go Reference](https://pkg.go.dev/badge/github.com/harwoeck/liblog/contract.svg)](https://pkg.go.dev/github.com/harwoeck/liblog/contract)
 
 ### Advantages
 
