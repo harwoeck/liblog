@@ -41,7 +41,9 @@ func newZapImpl(log *zap.Logger) *impl {
 }
 
 func (i *impl) Named(name string) contract.Logger {
-	return newZapImpl(i.log.Named(name))
+	l := newZapImpl(i.log.Named(name))
+	l.fields = i.fields
+	return l
 }
 
 func (i *impl) With(fields ...contract.Field) contract.Logger {
