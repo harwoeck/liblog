@@ -1,4 +1,4 @@
-package contract
+package liblog
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ type logger struct {
 func newLogger(outWriter, errWriter io.Writer, minLevel Level) *logger {
 	wd, err := os.Getwd()
 	if err != nil {
-		_, _ = fmt.Fprintf(errWriter, "liblog/contract.std: failed to get working directory\n")
+		_, _ = fmt.Fprintf(errWriter, "liblog: failed to get working directory: %v\n", err)
 	}
 
 	return &logger{
@@ -109,7 +109,7 @@ func (l *logger) log(level Level, msg string, fields fieldCollection) {
 	var callerStr string
 	_, frameF, frameL, defined := runtime.Caller(2)
 	if !defined {
-		_, _ = fmt.Fprintf(l.errWriter, "liblog/contract.std: failed to get caller\n")
+		_, _ = fmt.Fprintf(l.errWriter, "liblog: failed to get caller. runtime.Caller couldn't recover the information needed\n")
 	} else {
 		if len(l.wd) > 0 && l.wd != "/" && strings.HasPrefix(frameF, l.wd) {
 			frameF = strings.TrimPrefix(frameF, l.wd)
@@ -122,7 +122,7 @@ func (l *logger) log(level Level, msg string, fields fieldCollection) {
 	s := fmt.Sprintf("%s %s %s%s%s %s\n", timeStr, levelStr, nameStr, callerStr, msg, append(l.fields, fields...).String())
 
 	if _, err := fmt.Fprintf(l.outWriter, s); err != nil {
-		_, _ = fmt.Fprintf(l.errWriter, "liblog/contract.std: writing of message %q failed due to: %v", s, err)
+		_, _ = fmt.Fprintf(l.errWriter, "liblog: writing of message %q failed due to: %v", s, err)
 	}
 }
 
@@ -142,8 +142,8 @@ func (l *logger) Error(msg string, fields ...Field) {
 	l.log(ErrorLevel, msg, fields)
 }
 
-// FormatToError is a public helper function that converts a msg and fields pair
-// into an combined error. Intended for Logger.ErrorReturn
+// FormatToError is a public helper function that converts msg and fields info
+// into a combined error. Intended for Logger.ErrorReturn
 func FormatToError(name string, callerSkip int, msg string, fields ...Field) error {
 	var nameStr string
 	if len(name) > 0 {
@@ -232,7 +232,7 @@ func MinLevel(minLevel Level) StdOption {
 	}
 }
 
-// IsInDevEnvironment influences whether or not DPanicLevel panics or not
+// IsInDevEnvironment influences whether DPanicLevel panics or not
 func IsInDevEnvironment(isInDevEnvironment bool) StdOption {
 	return func(log *logger) error {
 		log.optInDev = isInDevEnvironment

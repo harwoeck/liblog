@@ -1,5 +1,5 @@
-// Package contract provides interfaces for a common logging backend
-package contract
+// Package liblog provides a common interface for logging backends
+package liblog
 
 // A Field is a marshaling operation used to add a key-value pair to a logger's
 // context
