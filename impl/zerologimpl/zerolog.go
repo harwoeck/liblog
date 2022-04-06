@@ -1,15 +1,15 @@
 package zerologimpl
 
 import (
-	"github.com/harwoeck/liblog/contract"
+	"github.com/harwoeck/liblog"
 	"github.com/rs/zerolog"
 )
 
-func NewZerologImpl(log *zerolog.Logger, inDevMode bool) contract.Logger {
+func NewZerologImpl(log *zerolog.Logger, inDevMode bool) liblog.Logger {
 	return newImpl(log, inDevMode)
 }
 
-func castFields(fields []contract.Field) interface{} {
+func castFields(fields []liblog.Field) interface{} {
 	m := make(map[string]interface{})
 	for _, item := range fields {
 		m[item.Key()] = item.Value()
@@ -21,7 +21,7 @@ type impl struct {
 	log       *zerolog.Logger
 	inDevMode bool
 	name      string
-	fields    []contract.Field
+	fields    []liblog.Field
 }
 
 func newImpl(log *zerolog.Logger, inDevMode bool) *impl {
@@ -33,7 +33,7 @@ func newImpl(log *zerolog.Logger, inDevMode bool) *impl {
 	}
 }
 
-func (i *impl) Named(name string) contract.Logger {
+func (i *impl) Named(name string) liblog.Logger {
 	if len(i.name) > 0 {
 		name = i.name + "." + name
 	}
@@ -46,7 +46,7 @@ func (i *impl) Named(name string) contract.Logger {
 	return l
 }
 
-func (i *impl) With(fields ...contract.Field) contract.Logger {
+func (i *impl) With(fields ...liblog.Field) liblog.Logger {
 	sub := i.log.With().Fields(castFields(fields)).Logger()
 	l := newImpl(&sub, i.inDevMode)
 	l.name = i.name
@@ -58,28 +58,28 @@ func (i *impl) Sync() error {
 	return nil
 }
 
-func (i *impl) Debug(msg string, fields ...contract.Field) {
+func (i *impl) Debug(msg string, fields ...liblog.Field) {
 	i.log.Debug().Fields(castFields(fields)).Msg(msg)
 }
 
-func (i *impl) Info(msg string, fields ...contract.Field) {
+func (i *impl) Info(msg string, fields ...liblog.Field) {
 	i.log.Info().Fields(castFields(fields)).Msg(msg)
 }
 
-func (i *impl) Warn(msg string, fields ...contract.Field) {
+func (i *impl) Warn(msg string, fields ...liblog.Field) {
 	i.log.Warn().Fields(castFields(fields)).Msg(msg)
 }
 
-func (i *impl) Error(msg string, fields ...contract.Field) {
+func (i *impl) Error(msg string, fields ...liblog.Field) {
 	i.log.Error().Fields(castFields(fields)).Msg(msg)
 }
 
-func (i *impl) ErrorReturn(msg string, fields ...contract.Field) error {
+func (i *impl) ErrorReturn(msg string, fields ...liblog.Field) error {
 	i.Error(msg, fields...)
-	return contract.FormatToError(i.name, 1, msg, append(i.fields, fields...)...)
+	return liblog.FormatToError(i.name, 1, msg, append(i.fields, fields...)...)
 }
 
-func (i *impl) DPanic(msg string, fields ...contract.Field) {
+func (i *impl) DPanic(msg string, fields ...liblog.Field) {
 	if i.inDevMode {
 		i.Panic(msg, fields...)
 	} else {
@@ -87,10 +87,10 @@ func (i *impl) DPanic(msg string, fields ...contract.Field) {
 	}
 }
 
-func (i *impl) Panic(msg string, fields ...contract.Field) {
+func (i *impl) Panic(msg string, fields ...liblog.Field) {
 	i.log.Panic().Fields(castFields(fields)).Msg(msg)
 }
 
-func (i *impl) Fatal(msg string, fields ...contract.Field) {
+func (i *impl) Fatal(msg string, fields ...liblog.Field) {
 	i.log.Fatal().Fields(castFields(fields)).Msg(msg)
 }
